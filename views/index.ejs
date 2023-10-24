@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src * gap:; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src * data: blob: android-webview-video-poster:; style-src * 'unsafe-inline';">
+  <title>German Federal Departments Datesets Treemap</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    html,
+    body,
+    svg {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: "Roboto", "Helvetica", sans-serif;
+    }
+  </style>
+</head>
+
+<body>
+  <svg id="treemap"></svg>
+
+  <script>
+    function isColorDark (r, g, b) {
+      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+      return luminance < 128;
+    }
+
+    function renderTreemap () {
+      // Clear the SVG
+      d3.select("#treemap").html("");
+
+      // Dimensions
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      const svg = d3.select("#treemap")
+        .attr("width", width)
+        .attr("height", height);
+
+      // Color scale
+      const color = d3.scaleSequential(d3.interpolateViridis)
+        .domain([0, height]);
+
+      // Prepare the data for D3
+      const data = {
+        name: "Ministries",
+        children: []
+      };
+
+    <% allOrganizationsWithDatasetCount.forEach(item => { %>
+        data.children.push({
+          name: '<%= item.display_name %>',
+          value: <%= item.package_count %>
+        });
+    <% }); %>
+
+    // Square root scale
+    const scale = d3.scaleSqrt()
+        .domain([0, d3.max(data.children, d => d.value)])
+        .range([0, Math.sqrt(d3.max(data.children, d => d.value))]);
+
+      // Create the treemap layout
+      const root = d3.hierarchy(data)
+        .sum(d => scale(d.value))
+        .sort((a, b) => b.value - a.value);
+
+      d3.treemap()
+        .tile(d3.treemapResquarify)
+        .size([width, height])
+        .padding(1)
+        .round(true)(root);
+
+      // Render the treemap
+      const leaf = svg.selectAll("g")
+        .data(root.leaves())
+        .join("g")
+        .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+      leaf.append("rect")
+        .attr("id", d => (d.leafUid = "leaf"))
+        .attr("fill", d => color(d.y0))
+        .attr("width", d => d.x1 - d.x0)
+        .attr("height", d => d.y1 - d.y0)
+        .attr("stroke", "white");
+
+      leaf.append("clipPath")
+        .attr("id", d => (d.clipUid = "clip"))
+        .append("use")
+        .attr("xlink:href", d => d.leafUid.href);
+
+      // Adding dataset count with larger font size at the top
+      leaf.append("text")
+        .attr("clip-path", d => d.clipUid)
+        .attr("font-size", "14px")
+        .attr("x", 4)
+        .attr("y", 15)
+        .attr("fill", d => {
+          const bgColor = d3.rgb(color(d.y0));
+          return isColorDark(bgColor.r, bgColor.g, bgColor.b) ? "white" : "black";
+        })
+        .text(d => d.data.value);
+
+      // Adding ministry names with smaller font size below the dataset count
+      leaf.append("text")
+        .attr("clip-path", d => d.clipUid)
+        .attr("font-size", "8px")
+        .attr("x", 4)
+        .attr("y", 25)
+        .attr("fill", d => {
+          const bgColor = d3.rgb(color(d.y0));
+          return isColorDark(bgColor.r, bgColor.g, bgColor.b) ? "white" : "black";
+        })
+        .selectAll("tspan")
+        .data(d => d.data.name.split(" "))
+        .join("tspan")
+        .attr("x", 4)
+        .attr("dy", "10")
+        .text(d => d);
+
+      leaf.append("title")
+        .text(d => `${d.data.name}\n${d.data.value}`);
+    }
+
+    // Initial render
+    renderTreemap();
+
+    // Refresh treemap on window resize
+    window.addEventListener('resize', renderTreemap);
+  </script>
+</body>
+
+</html>
